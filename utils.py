@@ -8,6 +8,7 @@ import warnings
 warnings.simplefilter("ignore", UserWarning)
 from sklearn.metrics import classification_report, confusion_matrix
 
+# Convert string to boolean for argparse    
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -18,10 +19,12 @@ def str2bool(v):
     else:
         raise ValueError('Boolean value expected.')
 
-
+# Label dict loading
 LABEL_DICT = pd.read_csv('./prompts/rootcode_modality.txt', header=0, delimiter='\t')
+#mapping of root code and penta code
 RootToPenta = dict(zip(LABEL_DICT.rootcode, LABEL_DICT.pentacode))
 
+#Table or Dict lookup for root code and penta code based on tense
 def decide_root_penta(rootcode, tense, LABEL_DICT=LABEL_DICT):
     pred_root = LABEL_DICT.loc[LABEL_DICT.rootcode == rootcode, tense].item()
     pred_penta = RootToPenta[pred_root]
@@ -41,6 +44,7 @@ def replace_mask(s, source=None, target=None):
 
 
 def get_nli_scores(premise, hypothesis, tokenizer, nli_model):
+    #If premise is a string and hypothesis is a list, it pairs the same premise with every hypothesis.
     if type(premise) == str:
         premise = [premise] * len(hypothesis)
 
