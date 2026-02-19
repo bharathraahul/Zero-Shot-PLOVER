@@ -74,6 +74,7 @@ def main(
     penta_flatten = df_prompt.pentacode.repeat(len(TENSE)).reset_index(drop=True)
     df_prompt_flatten = pd.concat([root_flatten, penta_flatten, prompt_text], axis=1)
     df_prompt_flatten = df_prompt_flatten[df_prompt_flatten.prompt_text != "None"].reset_index(drop=True)
+    df_prompt_flatten = df_prompt_flatten.fillna('').astype(str)
     print(f"\nall prompts flatten:\n{df_prompt_flatten.iloc[np.r_[0:4, -4:0]].to_string()}")
 
     if infer_setting == "offline":
