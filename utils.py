@@ -234,10 +234,10 @@ def inference(processed_data,
                             .rename_axis(None, axis=1)
         prompt_text_L1 = df_prompt_flatten[df_prompt_flatten.tense == tense_L1].set_index('prompt_idx')['prompt_text']
         df_L2['prompt_text'] = df_L2['prompt_idx'].map(prompt_text_L1)
-        df_L2['prompt_text'] = \
-            df_prompt_flatten.loc[(df_prompt_flatten.tense == tense_L1) & \
-                df_prompt_flatten.prompt_idx.isin(df_L2.prompt_idx),
-                                  'prompt_text'].values
+        # df_L2['prompt_text'] = \
+        #     df_prompt_flatten.loc[(df_prompt_flatten.tense == tense_L1) & \
+        #         df_prompt_flatten.prompt_idx.isin(df_L2.prompt_idx),
+        #                           'prompt_text'].values
 
         # In case there are only a subset of L2 tense
         valid_tense_L2 = list(set(tense_L2) & set(df_L2.columns))
