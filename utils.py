@@ -232,6 +232,8 @@ def inference(processed_data,
                             columns=['tense'], values='score') \
                             .fillna(-1).reset_index() \
                             .rename_axis(None, axis=1)
+        prompt_text_L1 = df_prompt_flatten[df_prompt_flatten.tense == tense_L1].set_index('prompt_idx')['prompt_text']
+        df_L2['prompt_text'] = df_L2['prompt_idx'].map(prompt_text_L1)
         df_L2['prompt_text'] = \
             df_prompt_flatten.loc[(df_prompt_flatten.tense == tense_L1) & \
                 df_prompt_flatten.prompt_idx.isin(df_L2.prompt_idx),
