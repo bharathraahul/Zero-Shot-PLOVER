@@ -401,3 +401,65 @@ def print_result(out_df, level_idx="L1", log=False):
             plt.tight_layout()
     return result
 
+def chatgpt_batch_prompt(sentences, source, target, label_description):
+
+    source_list = [f"<S>{src}</S>" for src in source]
+    target_list = [f"<T>{tgt}</T>" for tgt in target]
+
+    prompt = f"""Input and Task Requirement:
+Perform the RE task for the given input list and print the output with columns (No., Label, Quadrants) split by the tab delimiter.
+Use 1-15 to denote the predefined labels above (1. AGREE, 2. CONSULT, 3. SUPPORT, 4. COOPERATE, 5. AID, 6. YIELD,
+7. REQUEST, 8. ACCUSE, 9. REJECT, 10. THREATEN, 11. PROTEST, 12. SANCTION, 13. MOBILIZE, 14. COERCE, and
+15. ASSAULT).
+
+No. Sentence
+"""
+    # Add each sentence with its number
+    for i, (sent, src, tgt) in enumerate(zip(sentences, source_list, target_list), start=1):
+        # Replace <S> and <T> with actual source/target if needed (your sentences already contain placeholders)
+        # If not, you may need to insert them: e.g., sent = f"<S>{src}</S> {sent} <T>{tgt}</T>"
+        prompt += f"{i} {sent}\n"
+
+    prompt += "\nOutput:\n"
+    return prompt
+
+import openai
+
+    
+def query_chatgpt_batch(prompt, model="gpt-3.5-turbo", temperature=0.0, api_key=None, max_tokens=1000):
+    if api_key:
+        openai.api_key = api_key
+    try:
+        response = openai.ChatCompletion.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"OpenAI API error: {e}")
+        return None
+    
+def parse_batch_response(response_text, expected_count):
+    lines = response_text.strip().split('\n')
+    labels = []
+    for line in lines:
+        parts = line.split('\t')
+        if len(parts) >= 2:
+            # Try to extract the label number (e.g., "1 (AGREE)" -> 1)
+            label_part = parts[1].strip()
+            # Extract first number
+            import re
+            match = re.search(r'\b(\d+)\b', label_part)
+            if match:
+                labels.append(int(match.group(1)))
+            else:
+                labels.append(None)  # Failed to parse
+        if len(labels) == expected_count:
+            break
+    # If we got fewer labels, pad with None
+    if len(labels) < expected_count:
+        labels.extend([None] * (expected_count - len(labels)))
+    return labels    
+
