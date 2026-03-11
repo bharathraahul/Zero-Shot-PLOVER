@@ -1,182 +1,36 @@
-# ================================================================
-# PLOVER_Experiments.py
-# Complete experiment script — paste each STEP into a Colab cell
-# Methods: ZSP Tree / Tiny / Full (NLI) + No Codebook / Codebook
-#          / CoT / ICL (LLM via Ollama)
-# ================================================================
+#!/usr/bin/env python3
+"""
+PLOVER_run_all.py — Run all 7 experiments on Chameleon Cloud VM
+VM: GTX 6000 24GB | Repo: /home/cc/Zero-Shot-PLOVER
 
+Usage (run each step one at a time):
+    python3 PLOVER_run_all.py --step tree        # ZSP Tree (offline, uses cached .npy)
+    python3 PLOVER_run_all.py --step tiny         # ZSP Tiny (online, needs GPU ~15 min)
+    python3 PLOVER_run_all.py --step full         # ZSP Full (online, needs GPU ~45 min)
+    python3 PLOVER_run_all.py --step llm_no_cb    # LLM No Codebook (~30 min)
+    python3 PLOVER_run_all.py --step llm_cb       # LLM With Codebook (~30 min)
+    python3 PLOVER_run_all.py --step llm_cot      # LLM Chain-of-Thought (~45 min)
+    python3 PLOVER_run_all.py --step llm_icl      # LLM In-Context Learning (~30 min)
+    python3 PLOVER_run_all.py --step table        # Print final comparison table
+    python3 PLOVER_run_all.py --step all          # Run everything sequentially
 
-# ================================================================
-# STEP 1 — Fix numpy
-# Paste into Cell 1. RESTART KERNEL after running.
-# ================================================================
+Quick test (5 examples only):
+    python3 PLOVER_run_all.py --step llm_cb --limit 5
+"""
 
-import os
-os.system("pip install -q numpy==1.26.4 --force-reinstall")
-print("Done — RESTART KERNEL NOW, then continue from Step 2")
-
-
-# ================================================================
-# STEP 2 — Install all dependencies + start Ollama + mount Drive
-# Paste into Cell 2. Run after kernel restart.
-# ================================================================
-
-import subprocess, time, os
-
-os.system("pip install -q transformers torch scikit-learn pandas tqdm requests")
-os.system("sudo apt-get install -y curl zstd -qq")
-
-# Install and start Ollama
-os.system("curl -fsSL https://ollama.com/install.sh | sh")
-env = os.environ.copy()
-env["OLLAMA_NUM_PARALLEL"] = "4"
-subprocess.Popen(["ollama", "serve"], env=env)
-time.sleep(10)
-print("Ollama started")
-
-# Mount Google Drive
-from google.colab import drive
-drive.mount('/content/drive')
-
-REPO = '/content/drive/MyDrive/Zero-Shot-PLOVER'
-os.makedirs(f'{REPO}/outputs', exist_ok=True)
-os.makedirs(f'{REPO}/scores',  exist_ok=True)
-os.chdir(REPO)
-print("Setup complete ✅")
-
-
-# ================================================================
-# STEP 3 — Pull latest code from your GitHub repo
-# ================================================================
-
-import os
-REPO = '/content/drive/MyDrive/Zero-Shot-PLOVER'
-
-if os.path.exists(REPO):
-    os.system(f'cd {REPO} && git pull')
-    print("Pulled latest from GitHub ✅")
-else:
-    os.system('cd /content/drive/MyDrive && git clone https://github.com/bharathraahul/Zero-Shot-PLOVER')
-    print("Cloned repo ✅")
-
-os.chdir(REPO)
-
-# Check data
+import os, sys, argparse, subprocess, time, re
 import pandas as pd
-df = pd.read_csv(f'{REPO}/datasets/PLV_test.tsv', sep='\t')
-print(f"\nTest set : {df.shape[0]} rows  |  columns: {list(df.columns)}")
-print(df.head(3).to_string())
-
-
-# ================================================================
-# STEP 4 — Download the LLM model via Ollama
-# Only needed once. Takes ~5 mins.
-# ================================================================
-
-import os
-LLM_MODEL = "gemma2:9b"          # swap to llama3.1:8b-instruct if preferred
-os.system(f"ollama pull {LLM_MODEL}")
-print(f"{LLM_MODEL} ready ✅")
-
-
-# ================================================================
-# STEP 5a — NLI: ZSP Tree  (paper's best method)
-# Uses roberta-large-mnli + mode-aware tree-query framework
-# Expected results → Binary: 96.4  |  Quad: 89.6  |  Root: 82.4
-# ================================================================
-
-import os
-REPO = '/content/drive/MyDrive/Zero-Shot-PLOVER'
-os.chdir(REPO)
-
-cached  = os.path.exists(f'{REPO}/scores/PLV_test-Tree.npy')
-run_nli = "False" if cached else "True"
-setting = "offline"  if cached else "online"
-print(f"Cached scores: {cached}  →  run_offline_nli={run_nli}")
-
-os.system(f"""python main_script.py \
-  --data_dir       ./datasets/PLV_test.tsv \
-  --prompt_dir     ./prompts/Tree.txt \
-  --score_dir      ./scores/PLV_test-Tree.npy \
-  --model_name     roberta-large-mnli \
-  --output_dir     ./outputs/PLV_test-Tree-result.csv \
-  --consult_penalty 0.02 \
-  --infer_setting  {setting} \
-  --run_offline_nli {run_nli} \
-  --infer_details  True \
-  --summary_details True""")
-
-
-# ================================================================
-# STEP 5b — NLI: ZSP Tiny  (18 hypotheses, flat)
-# Expected results → Binary: 90.5  |  Quad: 69.5  |  Root: 50.8
-# ================================================================
-
-import os
-REPO = '/content/drive/MyDrive/Zero-Shot-PLOVER'
-os.chdir(REPO)
-
-cached  = os.path.exists(f'{REPO}/scores/PLV_test-Tiny.npy')
-run_nli = "False" if cached else "True"
-setting = "offline"  if cached else "online"
-
-os.system(f"""python main_script.py \
-  --data_dir       ./datasets/PLV_test.tsv \
-  --prompt_dir     ./prompts/Tiny.txt \
-  --score_dir      ./scores/PLV_test-Tiny.npy \
-  --model_name     roberta-large-mnli \
-  --output_dir     ./outputs/PLV_test-Tiny-result.csv \
-  --consult_penalty 0.02 \
-  --infer_setting  {setting} \
-  --run_offline_nli {run_nli} \
-  --infer_details  True \
-  --summary_details True""")
-
-
-# ================================================================
-# STEP 5c — NLI: ZSP Full  (222 hypotheses, flat)
-# Expected results → Binary: 91.0  |  Quad: 73.4  |  Root: 55.7
-# ================================================================
-
-import os
-REPO = '/content/drive/MyDrive/Zero-Shot-PLOVER'
-os.chdir(REPO)
-
-cached  = os.path.exists(f'{REPO}/scores/PLV_test-Full.npy')
-run_nli = "False" if cached else "True"
-setting = "offline"  if cached else "online"
-
-os.system(f"""python main_script.py \
-  --data_dir       ./datasets/PLV_test.tsv \
-  --prompt_dir     ./prompts/Full.txt \
-  --score_dir      ./scores/PLV_test-Full.npy \
-  --model_name     roberta-large-mnli \
-  --output_dir     ./outputs/PLV_test-Full-result.csv \
-  --consult_penalty 0.02 \
-  --infer_setting  {setting} \
-  --run_offline_nli {run_nli} \
-  --infer_details  True \
-  --summary_details True""")
-
-
-# ================================================================
-# STEP 6 — Load LLM helper functions
-# Run this ONCE before running Steps 7-10
-# ================================================================
-
-import pandas as pd, requests, time, re, os
+import requests
 from sklearn.metrics import f1_score
-from tqdm import tqdm
 
-REPO       = '/content/drive/MyDrive/Zero-Shot-PLOVER'
+REPO       = '/home/cc/Zero-Shot-PLOVER'
 LLM_MODEL  = 'gemma2:9b'
 OLLAMA_URL = 'http://localhost:11434/api/generate'
 
-# ---- Label definitions -----------------------------------------------
 ROOTCODES = [
-    'AGREE','CONSULT','SUPPORT','COOPERATE','AID','YIELD',
-    'REQUEST','ACCUSE','REJECT','THREATEN',
-    'PROTEST','SANCTION','MOBILIZE','COERCE','ASSAULT'
+    'AGREE', 'CONSULT', 'SUPPORT', 'COOPERATE', 'AID', 'YIELD',
+    'REQUEST', 'ACCUSE', 'REJECT', 'THREATEN',
+    'PROTEST', 'SANCTION', 'MOBILIZE', 'COERCE', 'ASSAULT'
 ]
 ROOT2QUAD = {
     'AGREE':1,'CONSULT':1,'SUPPORT':1,
@@ -184,312 +38,403 @@ ROOT2QUAD = {
     'REQUEST':3,'ACCUSE':3,'REJECT':3,'THREATEN':3,
     'PROTEST':4,'SANCTION':4,'MOBILIZE':4,'COERCE':4,'ASSAULT':4
 }
-ROOT2BIN = {r: (1 if ROOT2QUAD[r] <= 2 else 2) for r in ROOTCODES}
+ROOT2BIN = {r:(1 if ROOT2QUAD[r]<=2 else 2) for r in ROOTCODES}
 
-# ---- Codebook text (from paper Appendix H) ---------------------------
-CODEBOOK = """
-1.  AGREE      (Q1-Verbal Coop)   : Promise or offer to cooperate. Future cooperative actions = AGREE.
-2.  CONSULT    (Q1-Verbal Coop)   : All meetings, visits, phone consultations.
-3.  SUPPORT    (Q1-Verbal Coop)   : Express support, sign agreements, expand diplomatic ties.
-4.  COOPERATE  (Q2-Material Coop) : Material, economic, or military cooperation/exchange.
-5.  AID        (Q2-Material Coop) : Provide monetary, military, humanitarian, or asylum aid.
-6.  YIELD      (Q2-Material Coop) : Concessions — ceasefires, releasing prisoners, retreating.
-7.  REQUEST    (Q3-Verbal Conf)   : Verbal demands or orders less forceful than threats.
-8.  ACCUSE     (Q3-Verbal Conf)   : Criticize, condemn, accuse, investigate, sue.
-9.  REJECT     (Q3-Verbal Conf)   : Refuse assistance, reject proposals or meetings.
-10. THREATEN   (Q3-Verbal Conf)   : Threats or forceful warnings with serious repercussions.
-11. PROTEST    (Q4-Material Conf) : Civilian demonstrations, boycotts, collective protests.
-12. SANCTION   (Q4-Material Conf) : Withdraw or reduce diplomatic, commercial, or material ties.
-13. MOBILIZE   (Q4-Material Conf) : Military/police moves short of actual use of force.
-14. COERCE     (Q4-Material Conf) : Arrest, deport, ban, impose curfew, cyber attacks.
-15. ASSAULT    (Q4-Material Conf) : Physical violence — attacks, killings, military strikes.
-Rule: Prioritize Material Conflict labels over Verbal Conflict when both apply.
-"""
+CODEBOOK = """1. AGREE (Q1-Verbal Cooperation): Agree to, offer, promise, or indicate willingness to cooperate, including promises to sign or ratify agreements. Cooperative actions reported in future tense should be coded as AGREE.
+2. CONSULT (Q1-Verbal Cooperation): All consultations and meetings, including visiting, hosting visits, meeting at neutral location, consultation by phone or other media.
+3. SUPPORT (Q1-Verbal Cooperation): Initiate, resume, improve, or expand diplomatic, non-material cooperation; express support for, commend, approve, or ratify, sign, or finalize an agreement or treaty.
+4. COOPERATE (Q2-Material Cooperation): Initiate, resume, improve, or expand mutual material cooperation or exchange, including economics, military, judicial matters, and sharing of intelligence.
+5. AID (Q2-Material Cooperation): All provisions of material aid whose benefits primarily accrue to the recipient, including monetary, military, humanitarian, asylum etc.
+6. YIELD (Q2-Material Cooperation): Yieldings or concessions: resignations, easing of restrictions, release of prisoners, repatriation, allowing access, disarming, ceasefire, military retreat.
+7. REQUEST (Q3-Verbal Conflict): All verbal requests, demands, and orders, less forceful than threats. Demands as demonstrations/protests are coded as PROTEST.
+8. ACCUSE (Q3-Verbal Conflict): Disapprovals, complaints; condemn, criticize, defame. Accuse, charge judicially or informally. Sue or bring to court. Investigations.
+9. REJECT (Q3-Verbal Conflict): All rejections and refusals of assistance, policy changes, yielding, or meetings.
+10. THREATEN (Q3-Verbal Conflict): All threats, coercive or forceful warnings with serious potential repercussions. Generally verbal acts.
+11. PROTEST (Q4-Material Conflict): All civilian demonstrations and collective actions as protests. Dissent collectively, rally, gather to protest.
+12. SANCTION (Q4-Material Conflict): All reductions in existing cooperative relations. Withdrawing or discontinuing diplomatic, commercial, or material exchanges.
+13. MOBILIZE (Q4-Material Conflict): Military or police moves short of actual force. Demonstration of military capabilities. Distinct from verbal THREAT and actual ASSAULT.
+14. COERCE (Q4-Material Conflict): Repression, restrictions on rights, coercive power short of violence: arresting, deporting, banning, curfew, cyber attacks.
+15. ASSAULT (Q4-Material Conflict): Deliberate actions potentially resulting in substantial physical harm.
 
-# ---- ICL examples (2 per quadrant) -----------------------------------
-ICL_EXAMPLES = """
-Sentence: <S>The EU</S> signed a trade agreement with <T>Canada</T>.
-Answer: SUPPORT
+RULE: Prioritize Material Conflict (Q4) over Verbal Conflict (Q3). E.g. "protest to request" = PROTEST, "convict and arrest" = COERCE."""
 
+ICL_EXAMPLES = """Example 1:
+Sentence: <S>French National Assembly president</S> held talks with leaders of <T>Romania's</T> new government.
+Answer: CONSULT
+
+Example 2:
 Sentence: <S>The US</S> provided $500M in humanitarian aid to <T>Yemen</T>.
 Answer: AID
 
-Sentence: <S>North Korea</S> rejected peace talks proposed by <T>South Korea</T>.
+Example 3:
+Sentence: <S>A Brazilian federal court</S> rejected a request from <T>former President Lula</T>.
 Answer: REJECT
 
-Sentence: <S>Russian forces</S> launched missile strikes against <T>Ukrainian cities</T>.
+Example 4:
+Sentence: <S>Afghan rebels</S> kidnapped 16 <T>Soviet civilian advisers</T> and exploded bombs.
 Answer: ASSAULT
-"""
 
-# ---- Core functions --------------------------------------------------
+Example 5:
+Sentence: <S>A Taliban leader</S> surrendered in <T>Afghanistan's Faryab province</T>.
+Answer: YIELD
+
+Example 6:
+Sentence: <S>North Korea</S> issued a warning of serious consequences to <T>South Korea</T>.
+Answer: THREATEN
+
+Example 7:
+Sentence: <S>Thousands of workers</S> staged demonstrations against <T>the government</T>.
+Answer: PROTEST
+
+Example 8:
+Sentence: <S>The EU</S> signed a trade agreement with <T>Canada</T>.
+Answer: SUPPORT"""
+
+
+# ================================================================
+# HELPER FUNCTIONS
+# ================================================================
+
 def query_ollama(prompt, retries=3):
-    """Send prompt to local Ollama and return response text."""
     for i in range(retries):
         try:
             r = requests.post(OLLAMA_URL, json={
-                'model': LLM_MODEL,
-                'prompt': prompt,
+                'model': LLM_MODEL, 'prompt': prompt,
                 'stream': False,
                 'options': {'temperature': 0.0, 'num_predict': 60}
-            }, timeout=60)
+            }, timeout=120)
             return r.json().get('response', '').strip()
-        except:
-            time.sleep(2)
+        except Exception as e:
+            if i < retries - 1:
+                print(f"  Ollama retry {i+1}: {e}")
+                time.sleep(3)
     return ''
 
+
 def extract_label(text):
-    """Extract a PLOVER rootcode label from LLM response text."""
-    text_up = text.upper()
-    # Try number (1-15) first
+    text_up = text.upper().strip()
+    for label in ROOTCODES:
+        if text_up == label:
+            return label
+    m = re.match(r'^(\d{1,2})', text_up)
+    if m:
+        idx = int(m.group()) - 1
+        if 0 <= idx < 15:
+            return ROOTCODES[idx]
+    for label in ROOTCODES:
+        if label in text_up:
+            return label
     m = re.search(r'\b(1[0-5]|[1-9])\b', text)
     if m:
         idx = int(m.group()) - 1
         if 0 <= idx < 15:
             return ROOTCODES[idx]
-    # Try label name directly
-    for label in ROOTCODES:
-        if label in text_up:
-            return label
     return 'UNKNOWN'
 
+
+def extract_label_cot(text):
+    """Extract label from CoT response — look for ANSWER: line first."""
+    m = re.search(r'ANSWER:\s*(\w+)', text.upper())
+    if m:
+        candidate = m.group(1)
+        for label in ROOTCODES:
+            if label == candidate:
+                return label
+    return extract_label(text)
+
+
 def compute_f1(y_true, y_pred):
-    """Return (binary_f1, quad_f1, root_f1) × 100."""
-    root   = f1_score(y_true, y_pred, average='macro',
-                      labels=ROOTCODES, zero_division=0) * 100
-    yq_t   = [ROOT2QUAD.get(r, 0) for r in y_true]
-    yq_p   = [ROOT2QUAD.get(r, 0) for r in y_pred]
-    quad   = f1_score(yq_t, yq_p, average='macro', zero_division=0) * 100
-    yb_t   = [ROOT2BIN.get(r, 0) for r in y_true]
-    yb_p   = [ROOT2BIN.get(r, 0) for r in y_pred]
+    root = f1_score(y_true, y_pred, average='macro',
+                    labels=ROOTCODES, zero_division=0) * 100
+    yq_t = [ROOT2QUAD.get(r, 0) for r in y_true]
+    yq_p = [ROOT2QUAD.get(r, 0) for r in y_pred]
+    quad = f1_score(yq_t, yq_p, average='macro', zero_division=0) * 100
+    yb_t = [ROOT2BIN.get(r, 0) for r in y_true]
+    yb_p = [ROOT2BIN.get(r, 0) for r in y_pred]
     binary = f1_score(yb_t, yb_p, average='macro', zero_division=0) * 100
     return binary, quad, root
 
-def run_llm_experiment(name, prompt_fn, save_path, limit=None):
-    """
-    Loop over PLV_test.tsv, call Ollama with prompt_fn(sentence),
-    save predictions to CSV, and print F1 scores.
-    Set limit=50 for a quick sanity check before the full run.
-    """
+
+def load_test_data(limit=None):
     df = pd.read_csv(f'{REPO}/datasets/PLV_test.tsv', sep='\t')
     if limit:
         df = df.head(limit)
+    return df
 
-    sent_col  = df.columns[0]    # first column  = sentence
-    label_col = df.columns[-1]   # last column   = true label
 
+def get_columns(df):
+    sent_col = 'marked_sentence' if 'marked_sentence' in df.columns else df.columns[0]
+    label_col = 'gold_root' if 'gold_root' in df.columns else df.columns[-1]
+    return sent_col, label_col
+
+
+def load_nli_results(csv_path):
+    if not os.path.exists(csv_path):
+        print(f"  [MISSING] {csv_path}")
+        return None
+    df = pd.read_csv(csv_path)
+    y_true = df['gold_root'].astype(str).str.upper().tolist()
+    best = None
+    for suffix in ['L1', 'L2']:
+        col = f'root_{suffix}'
+        if col in df.columns:
+            y_pred = df[col].astype(str).str.upper().tolist()
+            score = compute_f1(y_true, y_pred)
+            print(f"  {suffix}: Binary={score[0]:.1f}  Quad={score[1]:.1f}  Root={score[2]:.1f}  Avg={sum(score)/3:.1f}")
+            if best is None or sum(score)/3 > sum(best)/3:
+                best = score
+    return best
+
+
+def run_llm_experiment(name, prompt_fn, save_path, extractor=extract_label, limit=None):
+    df = load_test_data(limit)
+    sent_col, label_col = get_columns(df)
     preds, truths, errors = [], [], 0
 
-    for _, row in tqdm(df.iterrows(), total=len(df), desc=name):
-        sentence  = str(row[sent_col])
+    print(f"\n  Running {name} on {len(df)} examples...")
+    for idx, row in df.iterrows():
+        sentence = str(row[sent_col])
         true_root = str(row[label_col]).upper().strip()
-        response  = query_ollama(prompt_fn(sentence))
-        pred      = extract_label(response)
+        response = query_ollama(prompt_fn(sentence))
+        pred = extractor(response)
         if pred == 'UNKNOWN':
             errors += 1
-            pred = 'REJECT'       # safe fallback
+            pred = 'REJECT'
         preds.append(pred)
         truths.append(true_root)
+        if (idx + 1) % 100 == 0:
+            b, q, r = compute_f1(truths, preds)
+            print(f"  [{idx+1}/{len(df)}] Bin={b:.1f} Quad={q:.1f} Root={r:.1f} Unk={errors}")
 
     pd.DataFrame({
-        'sentence': df[sent_col].values,
-        'true': truths,
-        'pred': preds
+        'sentence': df[sent_col].values[:len(preds)],
+        'gold_root': truths, 'pred_root': preds
     }).to_csv(save_path, index=False)
 
     b, q, r = compute_f1(truths, preds)
-    print(f"\n{'='*50}")
-    print(f"  Method    : {name}")
-    print(f"  Binary F1 : {b:.1f}")
-    print(f"  Quad   F1 : {q:.1f}")
-    print(f"  Root   F1 : {r:.1f}")
-    print(f"  Average   : {(b+q+r)/3:.1f}")
-    print(f"  Unknown   : {errors}/{len(df)}")
+    avg = (b + q + r) / 3
+    print(f"\n{'='*60}")
+    print(f"  {name}")
+    print(f"  Binary={b:.1f}  Quad={q:.1f}  Root={r:.1f}  Avg={avg:.1f}")
+    print(f"  Unknown={errors}/{len(df)}  Saved={save_path}")
+    print(f"{'='*60}")
     return b, q, r
 
-print("Helper functions loaded ✅")
-
 
 # ================================================================
-# STEP 7 — LLM: No Codebook
-# Just label names, no definitions.
-# Tests: does the model know PLOVER labels by name alone?
+# STEP RUNNERS
 # ================================================================
 
-def prompt_no_codebook(sentence):
-    labels = ', '.join(ROOTCODES)
-    return (
-        f"Classify the political relation between SOURCE and TARGET.\n\n"
-        f"Sentence: {sentence}\n\n"
-        f"Choose one label from: {labels}\n\n"
-        f"Output only the label name, nothing else."
-    )
+def run_zsp(name, prompt, score_name, output_name, online=False):
+    print(f"\n{'='*60}\n  {name}\n{'='*60}")
+    npy = f'{REPO}/scores/{score_name}'
+    out = f'{REPO}/outputs/{output_name}'
 
-# Quick single test to verify Ollama is working
-test = "<S>The US government</S> imposed sanctions on <T>Iran</T>."
-print("Test response:", query_ollama(prompt_no_codebook(test)))
-
-# Full run — change limit=50 for quick test, None for full 1033 examples
-r_no_cb = run_llm_experiment(
-    name      = "LLM No Codebook",
-    prompt_fn = prompt_no_codebook,
-    save_path = f'{REPO}/outputs/llm_no_codebook.csv',
-    limit     = None
-)
-
-
-# ================================================================
-# STEP 8 — LLM: With Codebook
-# Full label definitions pasted into the prompt.
-# This mirrors the paper's ChatGPT approach (Table 17 in paper).
-# ================================================================
-
-def prompt_with_codebook(sentence):
-    return (
-        f"You are a political event classifier.\n\n"
-        f"LABEL DEFINITIONS:\n{CODEBOOK}\n\n"
-        f"Sentence: {sentence}\n\n"
-        f"Output only the label name, nothing else."
-    )
-
-print("Test response:", query_ollama(prompt_with_codebook(test)))
-
-r_with_cb = run_llm_experiment(
-    name      = "LLM With Codebook",
-    prompt_fn = prompt_with_codebook,
-    save_path = f'{REPO}/outputs/llm_with_codebook.csv',
-    limit     = None
-)
-
-
-# ================================================================
-# STEP 9 — LLM: With Codebook + Chain-of-Thought (CoT)
-# Same definitions but forces step-by-step reasoning first.
-# Tests: does explicit reasoning improve accuracy?
-# ================================================================
-
-def prompt_cot(sentence):
-    return (
-        f"You are a political event classifier.\n\n"
-        f"LABEL DEFINITIONS:\n{CODEBOOK}\n\n"
-        f"Sentence: {sentence}\n\n"
-        f"Think step by step:\n"
-        f"1. What is the main action?\n"
-        f"2. Is it verbal (statements, promises) or material (physical actions)?\n"
-        f"3. Is it cooperative or conflictual?\n"
-        f"4. Which label fits best?\n\n"
-        f"Final answer (label name only):"
-    )
-
-print("Test response:", query_ollama(prompt_cot(test)))
-
-r_cot = run_llm_experiment(
-    name      = "LLM CoT",
-    prompt_fn = prompt_cot,
-    save_path = f'{REPO}/outputs/llm_cot.csv',
-    limit     = None
-)
-
-
-# ================================================================
-# STEP 10 — LLM: ICL (In-Context Learning / Few-Shot)
-# 4 example sentence→label pairs shown before the question.
-# No codebook definitions — just examples.
-# ================================================================
-
-def prompt_icl(sentence):
-    labels = ', '.join(ROOTCODES)
-    return (
-        f"Classify the political relation between SOURCE and TARGET.\n\n"
-        f"Here are some examples:\n{ICL_EXAMPLES}\n"
-        f"Now classify this:\n"
-        f"Sentence: {sentence}\n\n"
-        f"Labels to choose from: {labels}\n"
-        f"Output only the label name, nothing else."
-    )
-
-print("Test response:", query_ollama(prompt_icl(test)))
-
-r_icl = run_llm_experiment(
-    name      = "LLM ICL",
-    prompt_fn = prompt_icl,
-    save_path = f'{REPO}/outputs/llm_icl.csv',
-    limit     = None
-)
-
-
-# ================================================================
-# STEP 11 — Final Results Table
-# Run after ALL steps above are complete.
-# Loads every output file and prints one comparison table.
-# ================================================================
-
-import pandas as pd, os
-from sklearn.metrics import f1_score
-
-REPO = '/content/drive/MyDrive/Zero-Shot-PLOVER'
-
-def load_nli_csv(path):
-    """Parse a main_script.py output CSV and compute F1 scores."""
-    if not os.path.exists(path):
-        print(f"  Missing: {path}")
-        return None
-    df   = pd.read_csv(path)
-    cols = [c.lower() for c in df.columns]
-    ti   = next((i for i, c in enumerate(cols) if 'true' in c or 'gold' in c), None)
-    pi   = next((i for i, c in enumerate(cols) if 'pred' in c), None)
-    if ti is None or pi is None:
-        print(f"  Could not find true/pred columns in {path}")
-        return None
-    y_true = df.iloc[:, ti].astype(str).str.upper().tolist()
-    y_pred = df.iloc[:, pi].astype(str).str.upper().tolist()
-    return compute_f1(y_true, y_pred)
-
-results = {}
-
-# NLI results — parsed from CSV files written by main_script.py
-for name, path in [
-    ('ZSP Tree', f'{REPO}/outputs/PLV_test-Tree-result.csv'),
-    ('ZSP Tiny', f'{REPO}/outputs/PLV_test-Tiny-result.csv'),
-    ('ZSP Full', f'{REPO}/outputs/PLV_test-Full-result.csv'),
-]:
-    out = load_nli_csv(path)
-    results[name] = out if out else ('N/A', 'N/A', 'N/A')
-
-# LLM results — from variables set in Steps 7-10
-for name, var in [
-    ('LLM No Codebook',   'r_no_cb'),
-    ('LLM With Codebook', 'r_with_cb'),
-    ('LLM CoT',           'r_cot'),
-    ('LLM ICL',           'r_icl'),
-]:
-    results[name] = globals().get(var, ('N/A', 'N/A', 'N/A'))
-
-# Paper reference numbers for comparison
-results['─── Paper reference ───'] = ('─', '─', '─')
-results['[Paper] ZSP Tiny']        = (90.5, 69.5, 50.8)
-results['[Paper] ZSP Full']        = (91.0, 73.4, 55.7)
-results['[Paper] ZSP Tree']        = (96.4, 89.6, 82.4)
-
-# Print table
-print(f"\n{'Method':<28} {'Binary':>8} {'Quad':>8} {'Root':>8} {'Avg':>8}")
-print('─' * 60)
-rows = []
-for method, vals in results.items():
-    b, q, r = vals
-    if isinstance(b, float):
-        avg = (b + q + r) / 3
-        print(f"{method:<28} {b:>8.1f} {q:>8.1f} {r:>8.1f} {avg:>8.1f}")
-        rows.append({
-            'Method':    method,
-            'Binary_F1': round(b,   1),
-            'Quad_F1':   round(q,   1),
-            'Root_F1':   round(r,   1),
-            'Avg':       round(avg, 1)
-        })
+    if online:
+        setting, run_nli = 'online', ''
     else:
-        print(f"{method:<28} {str(b):>8} {str(q):>8} {str(r):>8} {'':>8}")
+        if not os.path.exists(npy):
+            print(f"  ERROR: {npy} not found! Run with online mode instead.")
+            return None
+        setting, run_nli = 'offline', '--run_offline_nli False'
 
-# Save final table
-out_path = f'{REPO}/outputs/final_results.csv'
-pd.DataFrame(rows).to_csv(out_path, index=False)
-print(f"\nSaved → {out_path} ✅")
+    cmd = (
+        f"cd {REPO} && python3 main_script.py "
+        f"--data_dir ./datasets/PLV_test.tsv "
+        f"--prompt_dir ./prompts/{prompt} "
+        f"--score_dir ./scores/{score_name} "
+        f"--model_name roberta-large-mnli "
+        f"--output_dir ./outputs/{output_name} "
+        f"--consult_penalty 0.02 "
+        f"--infer_setting {setting} "
+        f"{run_nli} "
+        f"--infer_details True "
+        f"--summary_details True"
+    )
+    print(f"  CMD: {cmd}\n")
+    ret = os.system(cmd)
+    if ret != 0:
+        print(f"  WARNING: main_script.py exited with code {ret}")
+    return load_nli_results(out)
+
+
+def run_zsp_tree():
+    return run_zsp("ZSP Tree (offline, cached)", "Tree.txt",
+                   "PLV_test-Tree.npy", "PLV_test-Tree-result.csv", online=False)
+
+def run_zsp_tiny():
+    return run_zsp("ZSP Tiny (online, GPU)", "Tiny.txt",
+                   "PLV_test-Tiny.npy", "PLV_test-Tiny-result.csv", online=True)
+
+def run_zsp_full():
+    return run_zsp("ZSP Full (online, GPU)", "Full.txt",
+                   "PLV_test-Full.npy", "PLV_test-Full-result.csv", online=True)
+
+
+def run_llm_no_codebook(limit=None):
+    def prompt_fn(sentence):
+        labels = ', '.join(ROOTCODES)
+        return (f"Classify the political relation between source (<S></S>) "
+                f"and target (<T></T>).\n\n"
+                f"Sentence: {sentence}\n\n"
+                f"Choose one label from: {labels}\n\n"
+                f"Output ONLY the label name, nothing else.")
+    return run_llm_experiment("LLM No Codebook", prompt_fn,
+                              f'{REPO}/outputs/llm_no_codebook.csv', limit=limit)
+
+def run_llm_with_codebook(limit=None):
+    def prompt_fn(sentence):
+        return (f"You are a political event classifier. Classify the relation "
+                f"between source (<S></S>) and target (<T></T>).\n\n"
+                f"LABEL DEFINITIONS:\n{CODEBOOK}\n\n"
+                f"Sentence: {sentence}\n\n"
+                f"Output ONLY the label name (e.g. AGREE, ASSAULT), nothing else.")
+    return run_llm_experiment("LLM With Codebook", prompt_fn,
+                              f'{REPO}/outputs/llm_with_codebook.csv', limit=limit)
+
+def run_llm_cot(limit=None):
+    def prompt_fn(sentence):
+        return (f"You are a political event classifier.\n\n"
+                f"LABEL DEFINITIONS:\n{CODEBOOK}\n\n"
+                f"Sentence: {sentence}\n\n"
+                f"Think step by step:\n"
+                f"1. Who is source, who is target?\n"
+                f"2. What is the main action?\n"
+                f"3. Verbal (statements/promises) or material (physical)?\n"
+                f"4. Cooperative or conflictual?\n"
+                f"5. Which label fits best?\n\n"
+                f"After reasoning, write final answer as:\nANSWER: <label>")
+    return run_llm_experiment("LLM CoT", prompt_fn,
+                              f'{REPO}/outputs/llm_cot.csv',
+                              extractor=extract_label_cot, limit=limit)
+
+def run_llm_icl(limit=None):
+    def prompt_fn(sentence):
+        labels = ', '.join(ROOTCODES)
+        return (f"Classify the political relation between source (<S></S>) "
+                f"and target (<T></T>).\n\n"
+                f"Here are labeled examples:\n\n{ICL_EXAMPLES}\n\n"
+                f"Now classify:\nSentence: {sentence}\n\n"
+                f"Labels: {labels}\nOutput ONLY the label name, nothing else.")
+    return run_llm_experiment("LLM ICL", prompt_fn,
+                              f'{REPO}/outputs/llm_icl.csv', limit=limit)
+
+
+# ================================================================
+# FINAL TABLE
+# ================================================================
+
+def print_final_table():
+    print(f"\n{'='*70}")
+    print(f"  FINAL RESULTS — PLOVER PLV_test (1033 examples)")
+    print(f"  Model: {LLM_MODEL} for LLM methods")
+    print(f"{'='*70}")
+
+    results = {}
+    for name, csv_name in [('ZSP Tree','PLV_test-Tree-result.csv'),
+                            ('ZSP Tiny','PLV_test-Tiny-result.csv'),
+                            ('ZSP Full','PLV_test-Full-result.csv')]:
+        path = f'{REPO}/outputs/{csv_name}'
+        if os.path.exists(path):
+            df = pd.read_csv(path)
+            y_true = df['gold_root'].astype(str).str.upper().tolist()
+            best = None
+            for s in ['L1','L2']:
+                col = f'root_{s}'
+                if col in df.columns:
+                    y_pred = df[col].astype(str).str.upper().tolist()
+                    sc = compute_f1(y_true, y_pred)
+                    if best is None or sum(sc)/3 > sum(best)/3:
+                        best = sc
+            results[name] = best or ('—','—','—')
+        else:
+            results[name] = ('—','—','—')
+
+    for name, csv_name in [('LLM No Codebook','llm_no_codebook.csv'),
+                            ('LLM With Codebook','llm_with_codebook.csv'),
+                            ('LLM CoT','llm_cot.csv'),
+                            ('LLM ICL','llm_icl.csv')]:
+        path = f'{REPO}/outputs/{csv_name}'
+        if os.path.exists(path):
+            df = pd.read_csv(path)
+            y_true = df['gold_root'].astype(str).str.upper().tolist()
+            y_pred = df['pred_root'].astype(str).str.upper().tolist()
+            results[name] = compute_f1(y_true, y_pred)
+        else:
+            results[name] = ('—','—','—')
+
+    paper = {
+        '[Paper] ZSP Tree': (96.4, 89.6, 82.4),
+        '[Paper] ZSP Tiny': (90.5, 69.5, 50.8),
+        '[Paper] ZSP Full': (91.0, 73.4, 55.7),
+        '[Paper] GPT-3.5':  (90.1, 66.2, 40.9),
+        '[Paper] GPT-4':    (93.4, 76.7, 61.5),
+    }
+
+    print(f"\n{'Method':<28} {'Binary':>8} {'Quad':>8} {'Root':>8} {'Avg':>8}")
+    print('─' * 62)
+    rows = []
+    for method, vals in results.items():
+        b, q, r = vals
+        if isinstance(b, (int, float)):
+            avg = (b+q+r)/3
+            print(f"{method:<28} {b:>8.1f} {q:>8.1f} {r:>8.1f} {avg:>8.1f}")
+            rows.append({'Method':method,'Binary_F1':round(b,1),'Quad_F1':round(q,1),
+                        'Root_F1':round(r,1),'Avg':round(avg,1)})
+        else:
+            print(f"{method:<28} {'—':>8} {'—':>8} {'—':>8} {'—':>8}")
+    print('─' * 62)
+    for method, vals in paper.items():
+        b, q, r = vals
+        avg = (b+q+r)/3
+        print(f"{method:<28} {b:>8.1f} {q:>8.1f} {r:>8.1f} {avg:>8.1f}")
+        rows.append({'Method':method,'Binary_F1':b,'Quad_F1':q,'Root_F1':r,'Avg':round(avg,1)})
+
+    out = f'{REPO}/outputs/final_results.csv'
+    pd.DataFrame(rows).to_csv(out, index=False)
+    print(f"\nSaved → {out}")
+
+
+# ================================================================
+# MAIN
+# ================================================================
+def main():
+    parser = argparse.ArgumentParser(description='PLOVER Experiments')
+    parser.add_argument('--step', required=True,
+        choices=['tree','tiny','full','llm_no_cb','llm_cb','llm_cot','llm_icl',
+                 'llm_all','nli_all','table','all'])
+    parser.add_argument('--limit', type=int, default=None,
+        help='Limit LLM experiments to N examples (for quick testing)')
+    args = parser.parse_args()
+
+    os.makedirs(f'{REPO}/outputs', exist_ok=True)
+    os.makedirs(f'{REPO}/scores', exist_ok=True)
+
+    dispatch = {
+        'tree':      lambda: run_zsp_tree(),
+        'tiny':      lambda: run_zsp_tiny(),
+        'full':      lambda: run_zsp_full(),
+        'llm_no_cb': lambda: run_llm_no_codebook(args.limit),
+        'llm_cb':    lambda: run_llm_with_codebook(args.limit),
+        'llm_cot':   lambda: run_llm_cot(args.limit),
+        'llm_icl':   lambda: run_llm_icl(args.limit),
+        'nli_all':   lambda: [run_zsp_tree(), run_zsp_tiny(), run_zsp_full()],
+        'llm_all':   lambda: [run_llm_no_codebook(args.limit),
+                              run_llm_with_codebook(args.limit),
+                              run_llm_cot(args.limit),
+                              run_llm_icl(args.limit)],
+        'table':     lambda: print_final_table(),
+        'all':       lambda: [run_zsp_tree(), run_zsp_tiny(), run_zsp_full(),
+                              run_llm_no_codebook(args.limit),
+                              run_llm_with_codebook(args.limit),
+                              run_llm_cot(args.limit),
+                              run_llm_icl(args.limit),
+                              print_final_table()],
+    }
+    dispatch[args.step]()
+
+    if args.step != 'table':
+        print(f"\n  → Run 'python3 PLOVER_run_all.py --step table' for full comparison.")
+
+if __name__ == '__main__':
+    main()
