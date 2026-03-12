@@ -175,7 +175,7 @@ def load_nli_results(csv_path):
     df = pd.read_csv(csv_path)
     y_true = df['gold_root'].astype(str).str.upper().tolist()
     best = None
-    for suffix in ['L1', 'L2']:
+    for suffix in ['L1', 'L2','L3']:
         col = f'root_{suffix}'
         if col in df.columns:
             y_pred = df[col].astype(str).str.upper().tolist()
