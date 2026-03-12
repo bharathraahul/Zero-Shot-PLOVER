@@ -156,7 +156,7 @@ def main(
     summary = print_result(out_df, 'L1', summary_details)
     if apply_level2:
         summary.update(print_result(out_df, 'L2', summary_details))
-    summary.update(print_result(out_df, 'L3', summary_details))
+    
 
     return out_df, summary
 
