@@ -259,8 +259,8 @@ def run_zsp(name, prompt, score_name, output_name, online=False):
 
 
 def run_zsp_tree():
-    return run_zsp("ZSP Tree (offline, cached)", "Tree.txt",
-                   "PLV_test-Tree.npy", "PLV_test-Tree-result.csv", online=False)
+    return run_zsp("ZSP Tree (online, GPU)", "Tree.txt",
+                   "PLV_test-Tree.npy", "PLV_test-Tree-result.csv", online=True)
 
 def run_zsp_tiny():
     return run_zsp("ZSP Tiny (online, GPU)", "Tiny.txt",
