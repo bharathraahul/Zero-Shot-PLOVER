@@ -587,7 +587,7 @@ def run_llm_bin_cot(limit=None):
                 f"1. Who is source, who is target?\n"
                 f"2. What is the main action?\n"
                 f"3. Is it cooperative or conflictual?\n\n"
-                f"After reasoning, write final answer as:\nANSWER: COOPERATION or CONFLICT")
+                f"After reasoning, write your final answer on a new line in this exact format:\nANSWER: <label>\nwhere <label> is either COOPERATION or CONFLICT.")
     return run_llm_binary_experiment("LLM Bin CoT", prompt_fn,
                               f'{REPO}/outputs/llm_bin_cot.csv',
                               extractor=extract_binary_cot, limit=limit)
@@ -636,8 +636,8 @@ def run_llm_quad_cot(limit=None):
                 f"3. Verbal or material?\n"
                 f"4. Cooperative or conflictual?\n\n"
                 f"After reasoning, write final answer as:\n"
-                f"ANSWER: <one of VERBAL_COOPERATION, MATERIAL_COOPERATION, "
-                f"VERBAL_CONFLICT, MATERIAL_CONFLICT>")
+                f"ANSWER: <label>\nwhere <label> is one of: VERBAL_COOPERATION, MATERIAL_COOPERATION, "
+                f"VERBAL_CONFLICT, MATERIAL_CONFLICT")
     return run_llm_quad_experiment("LLM Quad CoT", prompt_fn,
                               f'{REPO}/outputs/llm_quad_cot.csv',
                               extractor=extract_quadcode_cot, limit=limit)
