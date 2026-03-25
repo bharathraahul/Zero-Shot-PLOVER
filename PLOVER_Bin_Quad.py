@@ -262,6 +262,7 @@ def extract_binary(text):
     return 'UNKNOWN'
 
 def extract_binary_cot(text):
+    text_clean = re.sub(r'</?label>', '', text)
     m = re.search(r'ANSWER:\s*(\w+)', text.upper())
     if m:
         c = m.group(1)
@@ -284,6 +285,7 @@ def extract_quadcode(text):
     return 'UNKNOWN'
 
 def extract_quadcode_cot(text):
+    text_clean = re.sub(r'</?label>', '', text)
     m = re.search(r'ANSWER:\s*([\w_\- ]+)', text.upper())
     if m:
         result = extract_quadcode(m.group(1).strip())
