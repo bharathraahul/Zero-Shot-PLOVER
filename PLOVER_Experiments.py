@@ -443,7 +443,7 @@ def print_final_table():
 def main():
     parser = argparse.ArgumentParser(description='PLOVER Experiments')
     parser.add_argument('--step', required=True,
-        choices=['tree','tiny','full','llm_no_cb','llm_cb','llm_cot','llm_icl',
+        choices=['tree','tiny','full','llm_no_cb','llm_cb','llm_cb_v2','llm_cot','llm_icl',
                  'llm_all','nli_all','table','all'])
     parser.add_argument('--limit', type=int, default=None,
         help='Limit LLM experiments to N examples (for quick testing)')
