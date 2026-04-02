@@ -58,6 +58,38 @@ CODEBOOK = """1. AGREE (Q1-Verbal Cooperation): Agree to, offer, promise, or ind
 
 RULE: Prioritize Material Conflict (Q4) over Verbal Conflict (Q3). E.g. "protest to request" = PROTEST, "convict and arrest" = COERCE."""
 
+CODEBOOK_V2 = """CLASSIFICATION GUIDE: Classify the political relation between source (<S></S>) and target (<T></T>) using the PLOVER ontology. Focus on the actual action described, not background context.
+
+Q1 - VERBAL COOPERATION (statements, promises, diplomatic gestures):
+1. AGREE: Express intent to cooperate, offer, promise, or indicate willingness. Includes promises to sign or ratify agreements. Future-tense cooperative actions = AGREE. Examples: "agreed to cooperate," "offered to negotiate," "promised aid," "will provide assistance."
+2. CONSULT: All consultations and meetings. Visiting, hosting visits, meeting at neutral locations, phone or media consultations. Only use when the meeting itself is the primary action. Examples: "held talks," "met with officials," "consulted by phone."
+3. SUPPORT: Initiate, resume, improve, or expand diplomatic or non-material cooperation. Express support for, commend, approve, ratify, sign, or finalize an agreement or treaty. Examples: "endorsed the plan," "signed a treaty," "praised the initiative."
+
+Q2 - MATERIAL COOPERATION (physical actions, transfers, tangible concessions):
+4. COOPERATE: Initiate, resume, improve, or expand mutual material cooperation or exchange. Includes economics, military cooperation, judicial matters, intelligence sharing. Examples: "joint military exercises," "trade agreement implemented," "shared intelligence."
+5. AID: All provisions of material aid whose benefits primarily go to the recipient. Includes monetary, military, humanitarian, and asylum assistance. Examples: "provided $500M in aid," "sent humanitarian supplies," "granted asylum."
+6. YIELD: Yieldings or concessions. Resignations, easing of restrictions, release of prisoners, repatriation, allowing access, disarming, ceasefire, military retreat. Examples: "released prisoners," "agreed to ceasefire," "withdrew troops," "lifted the ban," "resigned from office."
+
+Q3 - VERBAL CONFLICT (statements, demands, accusations; NO physical action):
+7. REQUEST: Verbal requests, demands, and orders, less forceful than threats. NOTE: Demands made as demonstrations/protests = PROTEST instead. Examples: "demanded an apology," "called for sanctions," "urged compliance."
+8. ACCUSE: Disapprovals, complaints, condemnations, criticisms. Accuse or charge judicially or informally. Investigations. Examples: "condemned the attack," "charged with corruption," "launched an investigation."
+9. REJECT: All rejections and refusals of assistance, policy changes, yielding, or meetings. Examples: "refused to negotiate," "rejected the proposal," "vetoed the resolution."
+10. THREATEN: Threats, coercive or forceful warnings with serious repercussions. Verbal only. Examples: "warned of military action," "threatened sanctions," "issued an ultimatum."
+
+Q4 - MATERIAL CONFLICT (physical actions, force, tangible punishment):
+11. PROTEST: Civilian demonstrations and collective actions as protests. Rally, march, strike, gather to protest. Examples: "staged demonstrations," "marched in protest," "organized a strike."
+12. SANCTION: Reductions in existing cooperative relations. Withdrawing or discontinuing diplomatic, commercial, or material exchanges. Examples: "imposed trade embargo," "recalled ambassador," "froze assets," "halted military aid."
+13. MOBILIZE: Military or police moves short of actual force. Demonstration of military capabilities. Distinct from verbal THREAT and actual ASSAULT. Examples: "deployed troops to border," "placed forces on alert."
+14. COERCE: Repression, restrictions on rights, coercive power short of violence. Arresting, deporting, banning, curfew, cyber attacks. Examples: "arrested opposition leaders," "imposed curfew," "banned the organization."
+15. ASSAULT: Deliberate actions potentially resulting in substantial physical harm. Includes unconventional mass violence. Examples: "bombed the city," "kidnapped officials," "launched military offensive."
+
+CRITICAL RULES:
+- Material Conflict (Q4) overrides Verbal Conflict (Q3). "protest to request" = PROTEST. "convict and arrest" = COERCE.
+- Future-tense cooperation = AGREE, not the material action. "agreed to provide aid" = AGREE. "will send troops to help" = AGREE.
+- Negated or halted cooperation = SANCTION. "halted military aid" = SANCTION. "cut diplomatic ties" = SANCTION.
+- Peacekeeping forces/workers/observers sent to help = AID, not MOBILIZE.
+- CONSULT only when meeting is the main action, not a byproduct of another action."""
+
 ICL_EXAMPLES = """Example 1:
 Sentence: <S>French National Assembly president</S> held talks with leaders of <T>Romania's</T> new government.
 Answer: CONSULT
@@ -319,6 +351,16 @@ def run_llm_icl(limit=None):
     return run_llm_experiment("LLM ICL", prompt_fn,
                               f'{REPO}/outputs/llm_icl.csv', limit=limit)
 
+def run_llm_with_codebook_v2(limit=None):
+    def prompt_fn(sentence):
+        return (f"You are a political event classifier. Classify the relation "
+                f"between source (<S></S>) and target (<T></T>).\n\n"
+                f"{CODEBOOK_V2}\n\n"
+                f"Sentence: {sentence}\n\n"
+                f"Output ONLY the label name (e.g. AGREE, ASSAULT), nothing else.")
+    return run_llm_experiment("LLM CB v2", prompt_fn,
+                              f'{REPO}/outputs/llm_cb_v2.csv', limit=limit)
+
 
 # ================================================================
 # FINAL TABLE
@@ -416,6 +458,7 @@ def main():
         'full':      lambda: run_zsp_full(),
         'llm_no_cb': lambda: run_llm_no_codebook(args.limit),
         'llm_cb':    lambda: run_llm_with_codebook(args.limit),
+        'llm_cb_v2': lambda: run_llm_with_codebook_v2(args.limit),
         'llm_cot':   lambda: run_llm_cot(args.limit),
         'llm_icl':   lambda: run_llm_icl(args.limit),
         'nli_all':   lambda: [run_zsp_tree(), run_zsp_tiny(), run_zsp_full()],
