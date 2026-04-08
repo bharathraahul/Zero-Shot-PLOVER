@@ -5,14 +5,29 @@ REPO = '/home/cc/Zero-Shot-PLOVER'
 CAMEO_PDF = f'{REPO}/codebooks/CAMEO.Manual.1.1b3.pdf'
 OUTPUT_JSON = f'{REPO}/plover_codebook.json'
 
-# CAMEO rootcode to PLOVER rootcode mapping (from paper Table 1)
-CAMEO_TO_PLOVER = {
-    '03': 'AGREE',     '04': 'CONSULT',   '05': 'SUPPORT',
-    '06': 'COOPERATE', '07': 'AID',       '08': 'YIELD',
-    '09': 'ACCUSE',    '10': 'REQUEST',   '11': 'ACCUSE',
-    '12': 'REJECT',    '13': 'THREATEN',
-    '14': 'PROTEST',   '15': 'MOBILIZE',  '16': 'SANCTION',
-    '17': 'COERCE',    '18': 'ASSAULT',   '20': 'ASSAULT',
+# Section number in PDF -> CAMEO code -> PLOVER label
+# PDF uses 2.1 = CAMEO 01, 2.2 = CAMEO 02, 2.3 = CAMEO 03, etc.
+SECTION_MAP = {
+    '2.1':  {'cameo': '01', 'plover': None,       'title': 'MAKE PUBLIC STATEMENT'},
+    '2.2':  {'cameo': '02', 'plover': None,       'title': 'APPEAL'},
+    '2.3':  {'cameo': '03', 'plover': 'AGREE',    'title': 'EXPRESS INTENT TO COOPERATE'},
+    '2.4':  {'cameo': '04', 'plover': 'CONSULT',  'title': 'CONSULT'},
+    '2.5':  {'cameo': '05', 'plover': 'SUPPORT',  'title': 'ENGAGE IN DIPLOMATIC COOPERATION'},
+    '2.6':  {'cameo': '06', 'plover': 'COOPERATE','title': 'ENGAGE IN MATERIAL COOPERATION'},
+    '2.7':  {'cameo': '07', 'plover': 'AID',      'title': 'PROVIDE AID'},
+    '2.8':  {'cameo': '08', 'plover': 'YIELD',    'title': 'YIELD'},
+    '2.9':  {'cameo': '09', 'plover': 'ACCUSE',   'title': 'INVESTIGATE'},
+    '2.10': {'cameo': '10', 'plover': 'REQUEST',  'title': 'DEMAND'},
+    '2.11': {'cameo': '11', 'plover': 'ACCUSE',   'title': 'DISAPPROVE'},
+    '2.12': {'cameo': '12', 'plover': 'REJECT',   'title': 'REJECT'},
+    '2.13': {'cameo': '13', 'plover': 'THREATEN', 'title': 'THREATEN'},
+    '2.14': {'cameo': '14', 'plover': 'PROTEST',  'title': 'PROTEST'},
+    '2.15': {'cameo': '15', 'plover': 'MOBILIZE', 'title': 'EXHIBIT MILITARY POSTURE'},
+    '2.16': {'cameo': '16', 'plover': 'SANCTION', 'title': 'REDUCE RELATIONS'},
+    '2.17': {'cameo': '17', 'plover': 'COERCE',   'title': 'COERCE'},
+    '2.18': {'cameo': '18', 'plover': 'ASSAULT',  'title': 'ASSAULT'},
+    '2.19': {'cameo': '19', 'plover': 'ASSAULT',  'title': 'FIGHT'},
+    '2.20': {'cameo': '20', 'plover': 'ASSAULT',  'title': 'ENGAGE IN UNCONVENTIONAL MASS VIOLENCE'},
 }
 
 PLOVER_QUAD = {
@@ -35,8 +50,7 @@ PLOVER_QUAD = {
 
 
 def extract_text_from_pdf(pdf_path):
-    """Extract all text from the CAMEO PDF using available tools."""
-    # Try pdfplumber first
+    """Extract text using available tools."""
     try:
         import pdfplumber
         text = ""
@@ -47,12 +61,9 @@ def extract_text_from_pdf(pdf_path):
                     text += page_text + "\n"
         if text.strip():
             return text
-    except ImportError:
-        pass
     except Exception as e:
         print(f"  pdfplumber failed: {e}")
 
-    # Try pypdf
     try:
         from pypdf import PdfReader
         reader = PdfReader(pdf_path)
@@ -63,50 +74,45 @@ def extract_text_from_pdf(pdf_path):
                 text += page_text + "\n"
         if text.strip():
             return text
-    except ImportError:
-        pass
     except Exception as e:
         print(f"  pypdf failed: {e}")
 
-    # Fallback to pdftotext CLI
     import subprocess
     result = subprocess.run(['pdftotext', '-layout', pdf_path, '-'],
                           capture_output=True, text=True)
     return result.stdout
 
 
-def parse_cameo_rootcodes(text):
+def parse_sections(text):
     """
-    Parse the CAMEO manual text to extract rootcode-level sections.
-    Returns dict: {cameo_code: {title, description, subcodes}}
+    Parse CAMEO manual by finding section headers like:
+    2.3 EXPRESS INTENT TO COOPERATE
+    2.10 DEMAND
+    2.18 ASSAULT
     """
-    rootcodes = {}
+    sections = {}
 
-    # Match rootcode headers: "03 EXPRESS INTENT TO COOPERATE" etc.
-    rootcode_pattern = re.compile(
-        r'^(0[3-9]|1[0-8]|20)\s+([A-Z][A-Z\s/\-&]+?)(?:\n|$)',
+    # Match section headers: "2.3 EXPRESS INTENT TO COOPERATE" etc.
+    # The section numbers go from 2.1 to 2.20
+    section_pattern = re.compile(
+        r'^(2\.(?:1\d|20|[1-9]))\s+([A-Z][A-Z\s/\-&]+?)(?:\n|$)',
         re.MULTILINE
     )
 
-    # Match subcodes: "031", "0311", "142" etc.
-    subcode_pattern = re.compile(
-        r'^((?:0[3-9]|1[0-8]|20)\d{1,2})\s*[-–:]?\s*(.+?)(?:\n|$)',
-        re.MULTILINE
-    )
+    matches = list(section_pattern.finditer(text))
+    print(f"  Found {len(matches)} section headers")
 
-    rootcode_matches = list(rootcode_pattern.finditer(text))
-    print(f"  Found {len(rootcode_matches)} rootcode headers in text")
-
-    for i, match in enumerate(rootcode_matches):
-        code = match.group(1)
+    for i, match in enumerate(matches):
+        sec_num = match.group(1)
         title = match.group(2).strip()
 
-        # Get section text between this rootcode and the next
+        # Get text between this section and the next
         start = match.end()
-        end = rootcode_matches[i + 1].start() if i + 1 < len(rootcode_matches) else len(text)
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         section_text = text[start:end]
 
-        # Extract description (first block of text before subcodes)
+        # Extract the description (text before first subcode)
+        cameo_code = SECTION_MAP.get(sec_num, {}).get('cameo', '')
         lines = section_text.strip().split('\n')
         description_lines = []
         for line in lines:
@@ -115,43 +121,53 @@ def parse_cameo_rootcodes(text):
                 if description_lines:
                     break
                 continue
-            if re.match(r'^(?:0[3-9]|1[0-8]|20)\d', stripped):
+            # Stop if we hit a subcode pattern like "031" or "0311"
+            if cameo_code and re.match(rf'^{cameo_code}\d', stripped):
+                break
+            # Stop if we hit another section header
+            if re.match(r'^2\.\d', stripped):
                 break
             description_lines.append(stripped)
         description = ' '.join(description_lines)
 
-        # Extract subcodes from this section
+        # Extract subcodes (e.g., 031, 0311, 032, etc.)
         subcodes = []
-        for sm in subcode_pattern.finditer(section_text):
-            sc_code = sm.group(1)
-            sc_desc = sm.group(2).strip()
-            if len(sc_desc) > 5:  # filter out noise
-                subcodes.append({
-                    'code': sc_code,
-                    'description': sc_desc
-                })
+        if cameo_code:
+            subcode_pattern = re.compile(
+                rf'^({cameo_code}\d{{1,2}})\s*[-–:]?\s*(.+?)$',
+                re.MULTILINE
+            )
+            for sm in subcode_pattern.finditer(section_text):
+                sc_code = sm.group(1)
+                sc_desc = sm.group(2).strip()
+                if len(sc_desc) > 5:
+                    subcodes.append({
+                        'code': sc_code,
+                        'description': sc_desc
+                    })
 
-        rootcodes[code] = {
-            'cameo_code': code,
+        sections[sec_num] = {
+            'section': sec_num,
+            'cameo_code': cameo_code,
             'title': title,
-            'description': description[:500],
+            'description': description[:600],
             'subcodes': subcodes[:12]
         }
 
-    return rootcodes
+        print(f"  {sec_num} ({title[:40]:<40}) -> CAMEO {cameo_code} | {len(subcodes):>2} subcodes | desc: {len(description):>4} chars")
+
+    return sections
 
 
-def build_plover_json(cameo_rootcodes):
-    """
-    Convert parsed CAMEO rootcodes into PLOVER JSON codebook.
-    Groups multiple CAMEO codes that map to the same PLOVER label.
-    """
-    # Group by PLOVER label
+def build_plover_json(sections):
+    """Group parsed CAMEO sections by PLOVER label and build JSON."""
     plover_groups = {}
-    for cameo_code, info in cameo_rootcodes.items():
-        plover_label = CAMEO_TO_PLOVER.get(cameo_code)
-        if not plover_label:
+
+    for sec_num, info in sections.items():
+        mapping = SECTION_MAP.get(sec_num)
+        if not mapping or not mapping['plover']:
             continue
+        plover_label = mapping['plover']
         if plover_label not in plover_groups:
             plover_groups[plover_label] = []
         plover_groups[plover_label].append(info)
@@ -166,16 +182,13 @@ def build_plover_json(cameo_rootcodes):
         cameo_codes = [g['cameo_code'] for g in groups]
         cameo_titles = [g['title'] for g in groups]
 
-        # Combine descriptions
         descriptions = [g['description'] for g in groups if g['description']]
         definition = ' '.join(descriptions) if descriptions else f"Actions classified as {plover_label}."
 
-        # Combine subcodes
         all_subcodes = []
         for g in groups:
             all_subcodes.extend(g['subcodes'])
 
-        # Build clarification from subcodes
         subcode_strs = [f"{sc['code']}: {sc['description']}" for sc in all_subcodes[:8]]
         clarification = "Includes: " + '; '.join(subcode_strs) if subcode_strs else ""
 
@@ -207,57 +220,39 @@ def build_plover_json(cameo_rootcodes):
 
 
 def main():
-    # Check if PDF exists, try to download if not
     if not os.path.exists(CAMEO_PDF):
         print(f"CAMEO PDF not found at {CAMEO_PDF}")
-        print("Attempting download...")
-        os.makedirs(f'{REPO}/codebooks', exist_ok=True)
-        ret = os.system(f"wget -q -O {CAMEO_PDF} https://parusanalytics.com/eventdata/data.dir/CAMEO.Manual.1.1b3.pdf")
-        if ret != 0 or not os.path.exists(CAMEO_PDF):
-            print("Download failed. Please download manually:")
-            print(f"  wget -O {CAMEO_PDF} https://parusanalytics.com/eventdata/data.dir/CAMEO.Manual.1.1b3.pdf")
-            return
+        return
 
     print(f"Reading {CAMEO_PDF}...")
     text = extract_text_from_pdf(CAMEO_PDF)
     print(f"Extracted {len(text)} characters")
 
-    if len(text) < 500:
-        print("ERROR: Could not extract text. Try: pip install pdfplumber --break-system-packages")
-        return
-
     # Save raw text for debugging
     raw_path = f'{REPO}/codebooks/cameo_raw_text.txt'
     with open(raw_path, 'w') as f:
         f.write(text)
-    print(f"Raw text saved to {raw_path} for inspection")
+    print(f"Raw text saved to {raw_path}")
 
-    print("\nParsing CAMEO rootcodes...")
-    cameo_rootcodes = parse_cameo_rootcodes(text)
-    print(f"Found {len(cameo_rootcodes)} CAMEO rootcode sections:")
+    print("\nParsing sections...")
+    sections = parse_sections(text)
+    print(f"\nFound {len(sections)} sections total")
 
-    for code, info in sorted(cameo_rootcodes.items()):
-        plover = CAMEO_TO_PLOVER.get(code, 'DROPPED')
-        nsub = len(info['subcodes'])
-        desc_preview = info['description'][:60] + '...' if len(info['description']) > 60 else info['description']
-        print(f"  CAMEO {code} -> PLOVER {plover:<10} | {nsub:>2} subcodes | {desc_preview}")
-
-    # If parsing found too few rootcodes, warn
-    if len(cameo_rootcodes) < 10:
-        print(f"\nWARNING: Only found {len(cameo_rootcodes)} rootcodes (expected ~16).")
-        print("The PDF text extraction may need adjustment.")
-        print(f"Check {raw_path} to see what was extracted.")
-        print("You may need to install pdfplumber: pip install pdfplumber --break-system-packages")
+    if len(sections) < 10:
+        print(f"\nWARNING: Only found {len(sections)} sections (expected ~20).")
+        print(f"Check {raw_path} to see the extracted text format.")
+        print("Showing first 200 chars of raw text:")
+        print(text[:200])
+        return
 
     print("\nBuilding PLOVER JSON codebook...")
-    codebook = build_plover_json(cameo_rootcodes)
+    codebook = build_plover_json(sections)
     print(f"Built codebook with {len(codebook['labels'])} PLOVER labels")
 
     with open(OUTPUT_JSON, 'w') as f:
         json.dump(codebook, f, indent=2)
     print(f"\nSaved -> {OUTPUT_JSON}")
 
-    # Print summary
     print(f"\n{'='*60}")
     print("CODEBOOK SUMMARY")
     print(f"{'='*60}")
@@ -265,9 +260,6 @@ def main():
         nsub = len(entry.get('subcodes', []))
         deflen = len(entry['definition'])
         print(f"  {entry['label']:<12} {entry['quadcode']:<25} CAMEO {str(entry['cameo_codes']):<12} {nsub:>2} subcodes  def:{deflen:>3} chars")
-
-    print(f"\nTo use in your experiment, add to PLOVER_Experiments.py:")
-    print(f"  python3 PLOVER_Experiments.py --step llm_json_cb --limit 5")
 
 
 if __name__ == '__main__':
