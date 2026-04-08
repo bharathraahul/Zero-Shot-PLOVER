@@ -1,23 +1,3 @@
-#!/usr/bin/env python3
-"""
-PLOVER_run_all.py — Run all 7 experiments on Chameleon Cloud VM
-VM: GTX 6000 24GB | Repo: /home/cc/Zero-Shot-PLOVER
-
-Usage (run each step one at a time):
-    python3 PLOVER_run_all.py --step tree        # ZSP Tree (offline, uses cached .npy)
-    python3 PLOVER_run_all.py --step tiny         # ZSP Tiny (online, needs GPU ~15 min)
-    python3 PLOVER_run_all.py --step full         # ZSP Full (online, needs GPU ~45 min)
-    python3 PLOVER_run_all.py --step llm_no_cb    # LLM No Codebook (~30 min)
-    python3 PLOVER_run_all.py --step llm_cb       # LLM With Codebook (~30 min)
-    python3 PLOVER_run_all.py --step llm_cot      # LLM Chain-of-Thought (~45 min)
-    python3 PLOVER_run_all.py --step llm_icl      # LLM In-Context Learning (~30 min)
-    python3 PLOVER_run_all.py --step table        # Print final comparison table
-    python3 PLOVER_run_all.py --step all          # Run everything sequentially
-
-Quick test (5 examples only):
-    python3 PLOVER_run_all.py --step llm_cb --limit 5
-"""
-
 import os, sys, argparse, subprocess, time, re
 import pandas as pd
 import requests
