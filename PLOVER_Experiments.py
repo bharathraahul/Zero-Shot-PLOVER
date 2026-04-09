@@ -360,6 +360,37 @@ def run_llm_with_codebook_v2(limit=None):
                 f"Output ONLY the label name (e.g. AGREE, ASSAULT), nothing else.")
     return run_llm_experiment("LLM CB v2", prompt_fn,
                               f'{REPO}/outputs/llm_cb_v2.csv', limit=limit)
+import json
+def load_json_codebook():
+    with open(f'{REPO}/plover_codebook.json', 'r') as f:
+        return json.load(f)
+
+def format_json_codebook_for_prompt(cb):
+    lines = []
+    lines.append(cb['task_description'])
+    lines.append("")
+    for entry in cb['labels']:
+        lines.append(f"Label: {entry['label']}")
+        lines.append(f"  Quadcode: {entry['quadcode']}")
+        lines.append(f"  Definition: {entry['definition']}")
+        lines.append(f"  Clarification: {entry['clarification']}")
+        lines.append("")
+    lines.append("RULES:")
+    for rule in cb['disambiguation_rules']:
+        lines.append(f"  - {rule}")
+    lines.append("")
+    lines.append(cb['output_reminder'])
+    return '\n'.join(lines)
+
+def run_llm_with_json_codebook(limit=None):
+    cb = load_json_codebook()
+    codebook_prompt = format_json_codebook_for_prompt(cb)
+    def prompt_fn(sentence):
+        return (f"{codebook_prompt}\n\n"
+                f"Sentence: {sentence}\n\n"
+                f"Label:")
+    return run_llm_experiment("LLM JSON CB", prompt_fn,
+                              f'{REPO}/outputs/llm_json_cb.csv', limit=limit)
 
 
 # ================================================================
@@ -443,7 +474,7 @@ def print_final_table():
 def main():
     parser = argparse.ArgumentParser(description='PLOVER Experiments')
     parser.add_argument('--step', required=True,
-        choices=['tree','tiny','full','llm_no_cb','llm_cb','llm_cb_v2','llm_cot','llm_icl',
+        choices=['tree','tiny','full','llm_no_cb','llm_cb','llm_cb_v2','llm_json_cb','llm_cot','llm_icl',
                  'llm_all','nli_all','table','all'])
     parser.add_argument('--limit', type=int, default=None,
         help='Limit LLM experiments to N examples (for quick testing)')
@@ -459,6 +490,7 @@ def main():
         'llm_no_cb': lambda: run_llm_no_codebook(args.limit),
         'llm_cb':    lambda: run_llm_with_codebook(args.limit),
         'llm_cb_v2': lambda: run_llm_with_codebook_v2(args.limit),
+        'llm_json_cb': lambda: run_llm_with_json_codebook(args.limit),
         'llm_cot':   lambda: run_llm_cot(args.limit),
         'llm_icl':   lambda: run_llm_icl(args.limit),
         'nli_all':   lambda: [run_zsp_tree(), run_zsp_tiny(), run_zsp_full()],
