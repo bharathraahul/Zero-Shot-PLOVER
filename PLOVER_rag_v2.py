@@ -847,6 +847,7 @@ def print_comparison_table():
 # ---------------------------------------------------------------------------
 
 def main():
+    global LLM_MODEL, EMBED_MODEL
     parser = argparse.ArgumentParser(
         description="PLOVER RAG v2 — Enhanced Classification Module",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -873,7 +874,7 @@ Examples:
                         help=f'Embedding model (default: {EMBED_MODEL})')
     args = parser.parse_args()
 
-    global LLM_MODEL, EMBED_MODEL
+    
     LLM_MODEL = args.model
     EMBED_MODEL = args.embed
 
