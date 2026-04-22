@@ -759,6 +759,7 @@ def print_comparison_table():
 # ---------------------------------------------------------------------------
 
 def main():
+    global LLM_MODEL
     parser = argparse.ArgumentParser(
         description="PLOVER RAG Classification Module",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -780,7 +781,7 @@ Examples:
                         help=f'Ollama model name (default: {LLM_MODEL})')
     args = parser.parse_args()
 
-    global LLM_MODEL
+    
     LLM_MODEL = args.model
 
     output_dir = f'{REPO}/outputs'
